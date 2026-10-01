@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Coin Runner Deluxe - Endless Levels</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; user-select: none; -webkit-user-select: none; }
+    body { background: #0f172a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; overflow: hidden; }
+    #game-container { position: relative; width: 360px; height: 640px; background: #1e293b; border-radius: 18px; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
+    canvas { background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%); display: block; }
+    .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.92); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px; text-align: center; z-index: 10; }
+    .hidden { display: none !important; }
+    h1 { font-size: 30px; color: #fbbf24; text-shadow: 0 3px 6px rgba(0,0,0,0.4); font-weight: 800; }
+    p { font-size: 15px; color: #94a3b8; line-height: 1.4; }
+    #level-up-banner { position: absolute; top: 20%; left: 0; width: 100%; background: rgba(251, 191, 36, 0.95); color: #0f172a; font-size: 26px; font-weight: 900; padding: 12px 0; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3); pointer-events: none; transition: opacity 0.4s ease; z-index: 5; }
+    button { background: #4f46e5; color: white; border: none; padding: 14px 24px; font-size: 16px; font-weight: bold; border-radius: 30px; cursor: pointer; transition: transform 0.1s, background 0.2s; width: 85%; }
+    button:active { transform: scale(0.96); }
+    button.ad-btn { background: #10b981; }
+    button.ad-btn:hover { background: #059669; }
+    #hud { position: absolute; top: 12px; left: 15px; right: 15px; display: flex; justify-content: space-between; font-weight: bold; font-size: 16px; pointer-events: none; z-index: 2; }
+    .hud-box { background: rgba(15, 23, 42, 0.6); padding: 6px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
+    #level-display { color: #38bdf8; }
+    #score-display { color: #fbbf24; }
+    #touch-controls { position: absolute; bottom: 15px; left: 0; width: 100%; display: flex; justify-content: space-between; padding: 0 20px; gap: 20px; z-index: 2; }
+    .control-btn { flex: 1; height: 60px; background: rgba(255, 255, 255, 0.12); border: 2px solid rgba(255, 255, 255, 0.25); border-radius: 15px; color: #fff; font-size: 22px; font-weight: bold; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+    .control-btn:active { background: rgba(255, 255, 255, 0.35); }
+    #ad-modal { background: #000; z-index: 100; }
+    .ad-timer { font-size: 48px; color: #fbbf24; margin: 10px 0; font-weight: 800; }
+  </style>
+</head>
+<body>
+<div id="game-container">
+  <canvas id="canvas" width="360" height="640"></canvas>
+  <div id="hud"><div class="hud-box" id="level-display">LVL 1</div><div class="hud-box" id="score-display">Coins: 0</div></div>
+  <div id="level-up-banner" class="hidden">LEVEL UP!</div>
+  <div id="touch-controls"><div class="control-btn" id="btn-left">◀ LEFT</div><div class="control-btn" id="btn-right">RIGHT ▶</div></div>
+  <div id="start-screen" class="overlay"><h1>COIN RUNNER</h1><p>Collect coins to advance levels!<br>Higher levels feature faster hazards and intense obstacle density.</p><button onclick="startGame()">TAP TO PLAY</button></div>
+  <div id="gameover-screen" class="overlay hidden"><h1 style="color: #f87171;">GAME OVER</h1><p id="final-stats">Level 1 • Coins: 0</p><button class="ad-btn" onclick="triggerRewardedAd()">📺 WATCH AD TO REVIVE (+1 Life)</button><button onclick="startGame()">RESTART GAME</button></div>
+  <div id="ad-modal" class="overlay hidden"><p style="color:#94a3b8; font-size: 12px; letter-spacing: 1px;">SPONSORED ADVERTISEMENT</p><h2 style="color:#fff; font-size: 22px;">Mobile Game Showcase</h2><p>Rewarding player account in...</p><div class="ad-timer" id="ad-countdown">5</div><p style="font-size: 12px; color: #64748b;">Keep watching to claim your free revive</p></div>
+</div>
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  let player, obstacles, coins, score, currentLevel, gameActive, animFrame;
+  let moveLeft = false, moveRight = false;
+  const COINS_PER_LEVEL = 50;
+
+  function init() {
+    player = { x: 155, y: 490, width: 46, height: 46, vx: 0, maxSpeed: 7.5, friction: 0.82, accel: 1.4 };
+    obstacles = []; coins = []; score = 0; currentLevel = 1; updateHUD();
+  }
+  function updateHUD() { document.getElementById('score-display').innerText = `Coins: ${score}`; document.getElementById('level-display').innerText = `LVL ${currentLevel}`; }
+  function startGame() { init(); document.getElementById('start-screen').classList.add('hidden'); document.getElementById('gameover-screen').classList.add('hidden'); gameActive = true; loop(); }
+  function checkLevelProgression() { const calculatedLevel = Math.floor(score / COINS_PER_LEVEL) + 1; if (calculatedLevel > currentLevel) { currentLevel = calculatedLevel; showLevelUpBanner(); updateHUD(); } }
+  function showLevelUpBanner() { const banner = document.getElementById('level-up-banner'); banner.innerText = `LEVEL ${currentLevel}!`; banner.classList.remove('hidden'); setTimeout(() => banner.classList.add('hidden'), 1500); }
+  function spawnEntities() {
+    const baseObstacleSpeed = 3.5 + (currentLevel * 0.65);
+    const obstacleSpawnChance = Math.min(0.025 + (currentLevel * 0.007), 0.11);
+    if (Math.random() < obstacleSpawnChance) obstacles.push({ x: Math.random() * (canvas.width - 45), y: -40, width: 35 + Math.random() * 25, height: 18 + Math.random() * 10, speed: baseObstacleSpeed + (Math.random() * 1.5) });
+    if (Math.random() < 0.035) coins.push({ x: 20 + Math.random() * (canvas.width - 40), y: -30, radius: 11, speed: 3 + (currentLevel * 0.2) });
+  }
+  function update() {
+    if (moveLeft) player.vx -= player.accel;
+    if (moveRight) player.vx += player.accel;
+    player.vx *= player.friction; player.x += player.vx;
+    if (player.x < 0) { player.x = 0; player.vx = 0; }
+    if (player.x > canvas.width - player.width) { player.x = canvas.width - player.width; player.vx = 0; }
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      let o = obstacles[i]; o.y += o.speed; if (o.y > canvas.height) obstacles.splice(i, 1);
+      if (player.x < o.x + o.width && player.x + player.width > o.x && player.y < o.y + o.height && player.y + player.height > o.y) { endGame(); return; }
+    }
+    for (let i = coins.length - 1; i >= 0; i--) {
+      let c = coins[i]; c.y += c.speed; if (c.y > canvas.height) { coins.splice(i, 1); continue; }
+      let closestX = Math.max(player.x, Math.min(c.x, player.x + player.width));
+      let closestY = Math.max(player.y, Math.min(c.y, player.y + player.height));
+      let distanceX = c.x - closestX; let distanceY = c.y - closestY;
+      if ((distanceX * distanceX + distanceY * distanceY) < (c.radius * c.radius)) { coins.splice(i, 1); score += 10; checkLevelProgression(); updateHUD(); }
+    }
+    spawnEntities();
+  }
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#6366f1'; ctx.beginPath(); ctx.roundRect(player.x, player.y, player.width, player.height, 10); ctx.fill();
+    ctx.strokeStyle = '#818cf8'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#ef4444'; obstacles.forEach(o => { ctx.beginPath(); ctx.roundRect(o.x, o.y, o.width, o.height, 6); ctx.fill(); });
+    coins.forEach(c => { ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#d97706'; ctx.lineWidth = 2; ctx.stroke(); });
+  }
+  function loop() { if (!gameActive) return; update(); draw(); animFrame = requestAnimationFrame(loop); }
+  function endGame() { gameActive = false; cancelAnimationFrame(animFrame); document.getElementById('final-stats').innerText = `Reached Level ${currentLevel} • Total Coins: ${score}`; document.getElementById('gameover-screen').classList.remove('hidden'); }
+  function triggerRewardedAd() { const adModal = document.getElementById('ad-modal'); const timerElem = document.getElementById('ad-countdown'); adModal.classList.remove('hidden'); let timeLeft = 5; timerElem.innerText = timeLeft; const interval = setInterval(() => { timeLeft--; timerElem.innerText = timeLeft; if (timeLeft <= 0) { clearInterval(interval); adModal.classList.add('hidden'); revivePlayer(); } }, 1000); }
+  function revivePlayer() { obstacles = []; gameActive = true; document.getElementById('gameover-screen').classList.add('hidden'); loop(); }
+  const btnLeft = document.getElementById('btn-left'); const btnRight = document.getElementById('btn-right');
+  const setLeft = (val) => moveLeft = val; const setRight = (val) => moveRight = val;
+  btnLeft.addEventListener('touchstart', e => { e.preventDefault(); setLeft(true); }, {passive:false});
+  btnLeft.addEventListener('touchend', e => { e.preventDefault(); setLeft(false); }, {passive:false});
+  btnLeft.addEventListener('touchcancel', () => setLeft(false)); btnLeft.addEventListener('mousedown', () => setLeft(true)); btnLeft.addEventListener('mouseup', () => setLeft(false)); btnLeft.addEventListener('mouseleave', () => setLeft(false));
+  btnRight.addEventListener('touchstart', e => { e.preventDefault(); setRight(true); }, {passive:false});
+  btnRight.addEventListener('touchend', e => { e.preventDefault(); setRight(false); }, {passive:false});
+  btnRight.addEventListener('touchcancel', () => setRight(false)); btnRight.addEventListener('mousedown', () => setRight(true)); btnRight.addEventListener('mouseup', () => setRight(false)); btnRight.addEventListener('mouseleave', () => setRight(false));
+  window.addEventListener('keydown', e => { if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') moveLeft = true; if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') moveRight = true; });
+  window.addEventListener('keyup', e => { if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') moveLeft = false; if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') moveRight = false; });
+</script>
+</body>
+</html>
